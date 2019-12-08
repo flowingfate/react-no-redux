@@ -1,0 +1,22 @@
+{
+  "name": "react-no-redux",
+  "version": "0.1.0",
+  "description": "states manager for react app without react",
+  "main": "lib/index.js",
+  "author": "flowingfate",
+  "license": "MIT",
+  "repository": "github:flowingfate/react-no-redux",
+  "files": ["lib"],
+  "scripts": {
+    "build": "tsc",
+    "tscheck": "tsc --noEmit",
+    "prepublish": "npm run build"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0"
+  },
+  "devDependencies": {
+    "@types/react": "^16.9.11",
+    "typescript": "^3.6.4"
+  }
+}
