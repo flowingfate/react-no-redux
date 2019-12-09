@@ -3,21 +3,21 @@ import React, { createContext, PureComponent, useContext, ComponentClass } from 
 /* ------------------------------------------------------------------------------------ */
 /* --------------------------------------类型声明-------------------------------------- */
 /* ------------------------------------------------------------------------------------ */
-export interface IStore<S> {
+export interface Store<S> {
   set(state: ((prev: S) => Partial<S>) | Partial<S>, callback?: () => void ): void;
   get(): S;
 }
-export interface IModel<S, A> {
+export interface Model<S, A> {
   state: S;
-  factory(store: IStore<S>): A;
+  factory(store: Store<S>): A;
 }
 
-export type StateOf<M> = M extends IModel<infer S, any> ? S : unknown;
-export type ActionOf<M> = M extends IModel<any, infer A> ? A : unknown;
+export type StateOf<M> = M extends Model<infer S, any> ? S : unknown;
+export type ActionOf<M> = M extends Model<any, infer A> ? A : unknown;
 
 type StateMap<M> = { [K in keyof M]: StateOf<M[K]> }
 type ActionMap<M> = { [K in keyof M]: ActionOf<M[K]> }
-type ModelRecord = Record<string, IModel<any, any>>;
+type ModelRecord = Record<string, Model<any, any>>;
 
 /* ------------------------------------------------------------------------------------ */
 /* --------------------------------------辅助工具-------------------------------------- */
@@ -41,8 +41,8 @@ function memo<T, K extends any[]>(func: ((...args: K) => T)): ((...args: K) => T
   };
 }
 
-function bindScope<S, K extends keyof S>(store: IStore<S>, key: K) {
-  const scope: IStore<S[K]> = {
+function bindScope<S, K extends keyof S>(store: Store<S>, key: K) {
+  const scope: Store<S[K]> = {
     set: (state, callback) => {
       const origin = store.get()[key];
       const value = typeof state === 'function' ? state(origin) : state;
@@ -60,11 +60,11 @@ function bindScope<S, K extends keyof S>(store: IStore<S>, key: K) {
 /* --------------------------------------主要函数-------------------------------------- */
 /* ------------------------------------------------------------------------------------ */
 
-export function makeModel<S, A>(state: S, factory: (store: IStore<S>) => A): IModel<S, A> {
+export function makeModel<S, A>(state: S, factory: (store: Store<S>) => A): Model<S, A> {
   return { state, factory };
 }
 
-export function combineModels<M extends ModelRecord>(models: M): IModel<StateMap<M>, ActionMap<M>> {
+export function combineModels<M extends ModelRecord>(models: M): Model<StateMap<M>, ActionMap<M>> {
   const state = {} as StateMap<M>;
   const keys: Array<keyof M> = Object.keys(models);
   keys.forEach((key) => {
@@ -80,16 +80,15 @@ export function combineModels<M extends ModelRecord>(models: M): IModel<StateMap
   });
 }
 
-
-export default function createStore<S, A>(model: IModel<S, A>) {
+export default function createStore<S, A>(model: Model<S, A>) {
   const { state, factory } = model;
-  const initialStore: IStore<S> = {
+  const initialStore: Store<S> = {
     set: () => {},
     get: () => state,
   };
 
   const memoFactory = memo(factory);
-  const memoCtxValue = memo((state: S, store: IStore<S>) => {
+  const memoCtxValue = memo((state: S, store: Store<S>) => {
     const actions = memoFactory(store);
     return { state, actions };
   });
@@ -99,7 +98,7 @@ export default function createStore<S, A>(model: IModel<S, A>) {
 
   class Provider extends PureComponent<{}, S> {
     public state: S = Object.assign({}, state);
-    private store: IStore<S> = {
+    private store: Store<S> = {
       set: this.setState.bind(this),
       get: () => this.state,
     }
