@@ -14,10 +14,7 @@ export interface Model<S, A> {
 
 export type StateOf<M> = M extends Model<infer S, any> ? S : unknown;
 export type ActionOf<M> = M extends Model<any, infer A> ? A : unknown;
-
-type StateMap<M> = { [K in keyof M]: StateOf<M[K]> }
-type ActionMap<M> = { [K in keyof M]: ActionOf<M[K]> }
-type ModelRecord = Record<string, Model<any, any>>;
+export type StoreMap<M> = { [K in keyof M]: Store<M[K]> };
 
 /* ------------------------------------------------------------------------------------ */
 /* --------------------------------------辅助工具-------------------------------------- */
@@ -29,7 +26,14 @@ function isDiffArray(a: any[], b: any[]) {
   return a.some((item, i) => (item !== b[i]));
 }
 
-function memo<T, K extends any[]>(func: ((...args: K) => T)): ((...args: K) => T) {
+function isSameState<S extends object>(origin: S, value: Partial<S>) {
+  // Todo: value可能包含 S 中没有的字段
+  const keys = Object.keys(value);
+  if (keys.length === 0) return true;
+  return keys.every((k) => (origin[k] === value[k]));
+}
+
+function memo<T, K extends any[]>(func: ((...args: K) => T)) {
   let lastDeps: K;
   let cache: T;
   return (...deps: K): T => {
@@ -41,18 +45,24 @@ function memo<T, K extends any[]>(func: ((...args: K) => T)): ((...args: K) => T
   };
 }
 
-function bindScope<S, K extends keyof S>(store: Store<S>, key: K) {
-  const scope: Store<S[K]> = {
-    set: (state, callback) => {
-      const origin = store.get()[key];
-      const value = typeof state === 'function' ? state(origin) : state;
-      // Todo: 如果value相对于origin没有值变化，直接return
-      const record: Partial<S> = {};
-      record[key] = Object.assign({}, origin, value);
-      store.set(record, callback);
-    },
-    get: () => store.get()[key],
-  };
+export function mapStore<S extends Record<string, object>>(store: Store<S>) {
+  const initial = store.get();
+  const scope = {} as StoreMap<S>;
+
+  Object.keys(initial).forEach((key: keyof S) => {
+    scope[key] = {
+      set: (state, callback) => {
+        const origin = store.get()[key];
+        const value = (typeof state === 'function') ? state(origin) : state;
+        if (isSameState(origin, value)) return;
+        const record: Partial<S> = {};
+        record[key] = Object.assign({}, origin, value);
+        store.set(record, callback);
+      },
+      get: () => store.get()[key],
+    }
+  });
+
   return scope;
 }
 
@@ -64,20 +74,11 @@ export function makeModel<S, A>(state: S, factory: (store: Store<S>) => A): Mode
   return { state, factory };
 }
 
-export function combineModels<M extends ModelRecord>(models: M): Model<StateMap<M>, ActionMap<M>> {
-  const state = {} as StateMap<M>;
-  const keys: Array<keyof M> = Object.keys(models);
-  keys.forEach((key) => {
-    state[key] = models[key].state;
-  });
-  return makeModel(state, (store) => {
-    const actions = {} as ActionMap<M>;
-    keys.forEach((key) => {
-      const scope = bindScope(store, key)
-      actions[key] = models[key].factory(scope);
-    });
-    return actions;
-  });
+export function combineModels<M extends Record<string, object>, A>(
+  models: M,
+  factory: ((scope: StoreMap<M>) => A)
+) {
+  return makeModel(models, (store) => factory(mapStore(store)));
 }
 
 export default function createStore<S, A>(model: Model<S, A>) {
@@ -97,6 +98,7 @@ export default function createStore<S, A>(model: Model<S, A>) {
   const useStore = () => useContext(Context);
 
   class Provider extends PureComponent<{}, S> {
+    public static displayName = 'NoRedux-Root';
     public state: S = Object.assign({}, state);
     private store: Store<S> = {
       set: this.setState.bind(this),

@@ -1,4 +1,4 @@
-import { makeModel } from '../../src';
+import { Store } from '../../src';
 
 export interface IUserState {
   name: string;
@@ -10,8 +10,10 @@ const initial: IUserState = {
   age: 27,
 };
 
-export default makeModel(initial, (store) => {
+export const makeUserActions = (store: Store<IUserState>) => {
   const setName = (name: string) => store.set({ name });
   const setAge = (age: number) => store.set({ age });
   return { setName, setAge };
-});
+};
+
+export default initial;

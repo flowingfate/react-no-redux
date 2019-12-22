@@ -1,6 +1,6 @@
 user.ts
 ```ts
-import { makeModel } from 'react-no-redux';
+import { Store } from 'react-no-redux';
 
 export interface IUserState {
   name: string;
@@ -12,16 +12,18 @@ const initial: IUserState = {
   age: 27,
 };
 
-export default makeModel(initial, (store) => {
+export const makeUserActions = (store: Store<IUserState>) => {
   const setName = (name: string) => store.set({ name });
   const setAge = (age: number) => store.set({ age });
   return { setName, setAge };
-});
+};
+
+export default initial;
 ```
 
 work.ts
 ```ts
-import { makeModel } from 'react-no-redux';
+import { Store } from 'react-no-redux';
 
 export interface IWorkState {
   department: string;
@@ -33,20 +35,25 @@ const initial: IWorkState = {
   level: 5,
 }
 
-export default makeModel(initial, (store) => {
+export const makeWorkActions = (store: Store<IWorkState>) => {
   const setDepartment = (department: string) => store.set({ department });
   const setLevel = (level: number) => store.set({ level });
   return { setDepartment, setLevel };
-});
+};
+
+export default initial;
 ```
 
 store.ts
 ```ts
 import createStore, { combineModels } from 'react-no-redux';
-import user from './user';
-import work from './work';
+import user, { makeUserActions } from './user';
+import work, { makeWorkActions } from './work';
 
-const model = combineModels({ user, work });
+const model = combineModels({ user, work }, (store) => ({
+  user: makeUserActions(store.user),
+  work: makeWorkActions(store.work),
+}));
 const { WithStore, useStore, Context } = createStore(model);
 
 export { WithStore, useStore, Context };

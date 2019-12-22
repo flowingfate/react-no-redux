@@ -1,4 +1,4 @@
-import { makeModel } from '../../src';
+import { Store } from '../../src';
 
 export interface IWorkState {
   department: string;
@@ -10,8 +10,10 @@ const initial: IWorkState = {
   level: 5,
 }
 
-export default makeModel(initial, (store) => {
+export const makeWorkActions = (store: Store<IWorkState>) => {
   const setDepartment = (department: string) => store.set({ department });
   const setLevel = (level: number) => store.set({ level });
   return { setDepartment, setLevel };
-});
+};
+
+export default initial;
