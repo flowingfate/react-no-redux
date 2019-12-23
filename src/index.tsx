@@ -45,24 +45,29 @@ function memo<T, K extends any[]>(func: ((...args: K) => T)) {
   };
 }
 
+export function bindStore<S extends Record<string, object>, K extends keyof S>(store: Store<S>, key: K) {
+  const newStore: Store<S[K]> = {
+    get: () => store.get()[key],
+    set: (state, callback) => {
+      store.set((prev) => {
+        const origin = prev[key];
+        const value = (typeof state === 'function') ? state(origin) : state;
+        if (isSameState(origin, value)) return {};
+        const record: Partial<S> = {};
+        record[key] = Object.assign({}, origin, value);
+        return record;
+      }, callback);
+    },
+  };
+  return newStore;
+}
+
 export function mapStore<S extends Record<string, object>>(store: Store<S>) {
   const initial = store.get();
   const scope = {} as StoreMap<S>;
-
   Object.keys(initial).forEach((key: keyof S) => {
-    scope[key] = {
-      set: (state, callback) => {
-        const origin = store.get()[key];
-        const value = (typeof state === 'function') ? state(origin) : state;
-        if (isSameState(origin, value)) return;
-        const record: Partial<S> = {};
-        record[key] = Object.assign({}, origin, value);
-        store.set(record, callback);
-      },
-      get: () => store.get()[key],
-    }
+    scope[key] = bindStore(store, key);
   });
-
   return scope;
 }
 
