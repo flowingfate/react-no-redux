@@ -20,20 +20,20 @@ export type StoreMap<M> = { [K in keyof M]: Store<M[K]> };
 /* --------------------------------------辅助工具-------------------------------------- */
 /* ------------------------------------------------------------------------------------ */
 
-function isDiffArray(a: any[], b: any[]) {
+export function isDiffArray(a: any[], b: any[]) {
   if (!a || !b) return true;
   if (a.length !== b.length) return true;
   return a.some((item, i) => (item !== b[i]));
 }
 
-function isSameState<S extends object>(origin: S, value: Partial<S>) {
+export function isSameState<S extends object>(origin: S, value: Partial<S>) {
   // Todo: value可能包含 S 中没有的字段
   const keys = Object.keys(value);
   if (keys.length === 0) return true;
   return keys.every((k) => (origin[k] === value[k]));
 }
 
-function memo<T, K extends any[]>(func: ((...args: K) => T)) {
+export function memo<T, K extends any[]>(func: ((...args: K) => T)) {
   let lastDeps: K;
   let cache: T;
   return (...deps: K): T => {
@@ -88,10 +88,6 @@ export function combineModels<M extends Record<string, object>, A>(
 
 export default function createStore<S, A>(model: Model<S, A>) {
   const { state, factory } = model;
-  const initialStore: Store<S> = {
-    set: () => {},
-    get: () => state,
-  };
 
   const memoFactory = memo(factory);
   const memoCtxValue = memo((state: S, store: Store<S>) => {
@@ -99,7 +95,8 @@ export default function createStore<S, A>(model: Model<S, A>) {
     return { state, actions };
   });
 
-  const Context = createContext(memoCtxValue(state, initialStore));
+  const defaultContextValue: any = { state, actions: {} };
+  const Context = createContext<{ state: S, actions: A }>(defaultContextValue);
   const useStore = () => useContext(Context);
 
   class Provider extends PureComponent<{}, S> {
