@@ -1,5 +1,10 @@
 [![Build Status](https://travis-ci.org/flowingfate/react-no-redux.svg?branch=master)](https://travis-ci.org/flowingfate/react-no-redux)
 [![codecov](https://codecov.io/gh/flowingfate/react-no-redux/branch/master/graph/badge.svg)](https://codecov.io/gh/flowingfate/react-no-redux)
+![react](https://img.shields.io/badge/react-^16.8.0-blue.svg)
+![lang](https://img.shields.io/badge/lang-typescript-red.svg)
+![npm](https://img.shields.io/npm/v/react-no-redux)
+![GitHub file size in bytes](https://img.shields.io/github/size/flowingfate/react-no-redux/src/index.tsx)
+![npm](https://img.shields.io/npm/dw/react-no-redux)
 
 ---
 
