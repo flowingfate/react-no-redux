@@ -1,3 +1,10 @@
+[![Build Status](https://travis-ci.org/flowingfate/react-no-redux.svg?branch=master)](https://travis-ci.org/flowingfate/react-no-redux)
+[![codecov](https://codecov.io/gh/flowingfate/react-no-redux/branch/master/graph/badge.svg)](https://codecov.io/gh/flowingfate/react-no-redux)
+
+---
+
+## Usage
+
 user.ts
 ```ts
 import { Store } from 'react-no-redux';
