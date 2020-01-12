@@ -1,5 +1,5 @@
 import React from 'react';
-import { shallow } from 'enzyme';
+import { shallow, mount } from 'enzyme';
 import createStore, { makeModel, combineModels, Store } from '../src';
 
 interface IUser {
@@ -72,5 +72,42 @@ describe('主功能校验', () => {
     shallow(<Test />);
     expect(result.state).toBe(initialState);
     expect(result.actions).toEqual({});
+  });
+
+  it('Complex-Usage', () => {
+    let context: any;
+    const Inner = () => {
+      context = useStore();
+      const handle = () => {
+        context.actions.user.setAge(0);
+        context.actions.user.setName('flowingfate');
+      };
+      return <button onClick={handle}>click</button>;
+    };
+    const Middle = () => (
+      <div>
+        <h3>test</h3>
+        <Inner />
+      </div>
+    );
+    const Outer = () => (
+      <WithStore>
+        <Middle />
+      </WithStore>
+    );
+
+    const wrapper = mount(<Outer />);
+    expect(context.state).toEqual(initialState);
+    expect(context.actions.user.setName).toBeInstanceOf(Function);
+    expect(context.actions.user.setAge).toBeInstanceOf(Function);
+    expect(context.actions.work.setLevel).toBeInstanceOf(Function);
+    expect(context.actions.work.setSite).toBeInstanceOf(Function);
+
+    const old = context;
+    wrapper.find('button').simulate('click');
+    expect(old).not.toBe(context);
+    expect(context.state.user).toEqual({ name: 'flowingfate', age: 0 });
+    expect(context.state.work).toBe(old.state.work);
+    expect(context.actions).toBe(old.actions);
   });
 });

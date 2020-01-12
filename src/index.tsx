@@ -105,7 +105,7 @@ export default function createStore<S, A>(model: Model<S, A>) {
     private store: Store<S> = {
       set: this.setState.bind(this),
       get: () => this.state,
-    }
+    };
 
     render() {
       const { state, store } = this;
