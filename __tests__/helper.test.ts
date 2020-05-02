@@ -1,23 +1,6 @@
-import { isDiffArray, isSameState, memo, mapStore, Store } from '../src';
+import { isSameState, mapStore, Store } from '../src';
 
 describe('辅助方法', () => {
-  describe('isDiffArray', () => {
-    it('异常入参校验', () => {
-      expect(isDiffArray(undefined, undefined)).toBe(true);
-      expect(isDiffArray([], undefined)).toBe(true);
-      expect(isDiffArray(undefined, [])).toBe(true);
-      expect(isDiffArray([], [])).toBe(false);
-    });
-
-    it('合法入参校验', () => {
-      expect(isDiffArray([1], [1, 2])).toBe(true);
-      expect(isDiffArray([1, 2], [1, 2])).toBe(false);
-      expect(isDiffArray([1, {}], [1, {}])).toBe(true);
-      const place = {};
-      expect(isDiffArray([1, place], [1, place])).toBe(false);
-    })
-  });
-
   describe('isSameState', () => {
     const place = { name: '123', age: 123 };
     const origin = { a: 1, b: '2', c: place };
@@ -34,23 +17,6 @@ describe('辅助方法', () => {
       expect(isSameState(origin, { a: 1, b: '2' })).toBe(true);
       expect(isSameState(origin, { c: place })).toBe(true);
       expect(isSameState(origin, { c: { ...place } })).toBe(false);
-    });
-  });
-
-  describe('memo', () => {
-    const maker = (a: number, b: number) => ({ a, b });
-    const memoMaker = memo(maker);
-
-    it('生成函数', () => {
-      expect(memoMaker).toBeInstanceOf(Function);
-    });
-
-    it('缓存结果正确', () => {
-      const origin = memoMaker(1, 2);
-      expect(origin).toEqual({ a: 1, b: 2 });
-      expect(origin).toBe(memoMaker(1, 2));
-      expect(origin).not.toBe(memoMaker(1, 3));
-      expect(memoMaker(3, 4)).toBe(memoMaker(3, 4));
     });
   });
 

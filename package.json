@@ -1,6 +1,6 @@
 {
   "name": "react-no-redux",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "states manager for react app without react",
   "main": "lib/index.js",
   "author": "flowingfate",
