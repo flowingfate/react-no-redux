@@ -10,162 +10,98 @@
 
 ## Why
 
-Redux已经是状态管理的首选，为什么还要做这样一个方案？
+虽然状态管理还是Redux占据半壁江山，但是新的东西早已层出不穷！
 
-其实 react-redux 在与typescipt的搭配上，做的并不够完善，而这套方案产生的最原始的初衷就是为了解决类型问题，可以这么说：“为类型编程”
+在我个人看来，Redux存在2个显著的弊端：
+* 与Typescript配合不够友好，
+* 使用过程过于繁琐，强行增加人的认知成本
 
-当然，它也解决一些其它的诉求
+更多关于Redux的考量参见这里 **[Redux的问题](./docs/no-redux.md)**
 
-更多考虑参见 **[这里](./docs/why.md)**
+
+React 本身就提供了Context用于跨组件通信，一个好的状态管理，无非就是对原生Context的用法进行优化，使得：
+* 性能表现更好
+* 使用方式更友善
+
+
+## Goal
+
+* 足够轻量小巧
+* 足够类型健壮
+* 概念少，结构完全透明，使用简单
+* 支持多实例（不像Redux那样使用单例），可以在任意局部灵活使用
 
 
 ## How
 
-一个状态管理方案，需要提供一个基础，在这个基础上，开发者自定义：状态树和变更逻辑
+> 写这个东西主要是为了记录自己的学习理解，也顺便Share一下
 
-我通过 **[这样的方式](./docs/how.md)** 来构建这个基础，在此之上，进行一些封装和组织，就形成了这套方案
+感兴趣可以阅读 **[源码](./src/index.tsx)** ，它非常精简，除了react，没有其它任何额外的东西，其中有几个关键要点：
 
-感兴趣可以阅读 **[源码](./src/index.tsx)** ，它非常精简，除了react，没有其它任何额外的东西
+#### ① 不变的Context value
+
+Context value变化的时候，需要递归遍历子树，寻找依赖它的节点进行更新，所以效率会很差
+* 所以，当状态变化时，通知组件状态的变更不能依赖 Context value 的改变
+* `value={useMemo(buildStore, [])}` 就是为了保证其不发生变化
+* 变更通知，只能采用别的方式 —— 发布订阅
+
+#### ② 发布订阅（事件机制）
+
+当状态变化时，发布订阅能做到精准的点对点更新（redux中其实也用到了发布订阅）
+
+#### ③ 触发变更——偷梁换柱
+
+```tsx
+const [v, set] = useState(data);
+useEffect(() => listen(set), []);
+return [v, change] as const;
+```
+把原始的变更函数 `set` 注册给监听器，替换为 `change` 函数返回，调用change时，不仅会修改数据，还会通知其它监听状态的组件
 
 
-## Simple-Usage
+## Usage Sample
 
 store.ts
 ```ts
-import createStore, { makeModel } from 'react-no-redux';
+import { atom } from 'react-no-redux';
 
-interface State {
-  a: number;
-  b: string;
-  c: string[];
+// define atoms with initial states
+export const store = {
+  a: atom(1),
+  b: atom('2'),
+  c: atom<string[]>([]),
 };
-const inital: State = { a: 1, b: '2', c: [] };
-
-const model = makeModel(inital, (store) => {
-  const setA = (a: number) => store.set({ a });
-  const setB = (b: string) => store.set({ b });
-  const removeFromC = (id: string) => store.set((prev) => ({
-    c: prev.c.filter(item => (item !== id)),
-  }));
-
-  return { setA, setB, removeFromC };
-});
-
-const { WithStore, useStore, Context } = createStore(model);
-export { WithStore, useStore, Context };
 ```
 
 app.tsx
 ```tsx
 import React from 'react';
-import { WithStore, useStore } from './store';
+import { useAtom, useChange, WithStore } from 'react-no-redux';
+import { store } from './store';
 
-const Target = () => {
-  const { state, actions } = useStore();
-  // state 和 actions 任你差遣
-  const removeB = () => actions.removeFromC(state.b);
+const BizA = () => {
+  const [a] = useAtom(store.a);
+  const [b] = useAtom(store.b);
+  const setC = useChange(store.c);
+  const removeB = () => setC(list => list.filter(item => (item !== b)));;
+  return <div onClick={removeB}>{a}</div>;
+};
+
+const BizB  = () => {
+  const [list] = useAtom(store.c);
   return (
-    <div onClick={removeB}>{state.a}</div>
+    <div>
+      {list.map(item => <span>{item}</span>)}
+    </div>
   );
 };
 
 const App = () => (
   <WithStore>
-    <div>
-      ···多层嵌套···
-      <Target />
-      ···多层嵌套···
-    </div>
+    <div><BizA /></div>
+    <div><BizB /></div>
   </WithStore>
 );
 
 export default App;
-```
-
-
-## Complex-Usage
-
-user.ts
-```ts
-import { Store } from 'react-no-redux';
-
-export interface IUserState {
-  name: string;
-  age: number;
-}
-
-const initial: IUserState = {
-  name: '鸣达',
-  age: 27,
-};
-
-export const makeUserActions = (store: Store<IUserState>) => {
-  const setName = (name: string) => store.set({ name });
-  const setAge = (age: number) => store.set({ age });
-  return { setName, setAge };
-};
-
-export default initial;
-```
-
-work.ts
-```ts
-import { Store } from 'react-no-redux';
-
-export interface IWorkState {
-  department: string;
-  level: number;
-}
-
-const initial: IWorkState = {
-  department: '钉钉',
-  level: 5,
-}
-
-export const makeWorkActions = (store: Store<IWorkState>) => {
-  const setDepartment = (department: string) => store.set({ department });
-  const setLevel = (level: number) => store.set({ level });
-  return { setDepartment, setLevel };
-};
-
-export default initial;
-```
-
-store.ts
-```ts
-import createStore, { combineModels } from 'react-no-redux';
-import user, { makeUserActions } from './user';
-import work, { makeWorkActions } from './work';
-
-const model = combineModels({ user, work }, (store) => ({
-  user: makeUserActions(store.user),
-  work: makeWorkActions(store.work),
-}));
-const { WithStore, useStore, Context } = createStore(model);
-
-export { WithStore, useStore, Context };
-```
-
-app.tsx
-```tsx
-import React from 'react';
-import { WithStore } from './store';
-
-const App = () => (
-  <WithStore>
-    <div>放置你的业务组件</div>
-  </WithStore>
-);
-
-export default App;
-```
-
-target.tsx
-```tsx
-import { useStore } from './store';
-
-const Target = () => {
-  const { state, actions } = useStore();
-  // state 和 actions 任你差遣
-};
 ```
