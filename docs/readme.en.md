@@ -1,3 +1,5 @@
+# React No Redux
+
 [![Build Status](https://travis-ci.org/flowingfate/react-no-redux.svg?branch=master)](https://travis-ci.org/flowingfate/react-no-redux)
 [![codecov](https://codecov.io/gh/flowingfate/react-no-redux/branch/master/graph/badge.svg)](https://codecov.io/gh/flowingfate/react-no-redux)
 ![react](https://img.shields.io/badge/react-^16.8.0-blue.svg)
@@ -8,52 +10,47 @@
 
 ---
 
-**[English Version](./docs/readme.en.md)**
-
 ## Why
 
-虽然状态管理还是Redux占据半壁江山，但是新的东西早已层出不穷！
+Although Redux still dominates state management, new solutions have emerged constantly!
 
-在我个人看来，Redux存在2个显著的弊端：
-* 与Typescript配合不够友好，
-* 使用过程过于繁琐，强行增加人的认知成本
+In my opinion, Redux has 2 significant drawbacks:
+* Not TypeScript-friendly enough
+* Too cumbersome to use, artificially increasing cognitive load
 
-更多关于Redux的考量参见这里 **[Redux的问题](./docs/no-redux.md)**
+For more considerations about Redux, see **[Problems with Redux](./no-redux.md)**
 
+Emerging state management solutions like Jotai, Recoil, Zustand, etc., are all lightweight and user-friendly. This solution also aims to provide the same great experience.
 
-新兴的状态管理，例如 Jotai 、Recoil、Zustand 等等，他们都足够轻量好用，本方案也是旨在提供和他们一样好的体验
-
-React 本身就提供了Context用于跨组件通信，一个好的状态管理，无非就是对原生Context的用法进行优化，使得：
-* 性能表现更好
-* 使用方式更友善
-
+React itself provides Context for cross-component communication. A good state management solution is essentially an optimization of native Context usage to achieve:
+* Better performance
+* More friendly usage
 
 ## Goal
 
-* 足够轻量小巧
-* 足够类型健壮
-* 概念少，结构完全透明，使用简单
-* 支持多实例（不像Redux那样使用单例），可以在任意局部灵活使用
-
+* Lightweight and compact
+* Type-safe and robust
+* Minimal concepts, completely transparent structure, simple usage
+* Support multiple instances (unlike Redux's singleton pattern), can be used flexibly in any local scope
 
 ## How
 
-> 写这个东西主要是为了记录自己的学习理解，也顺便Share一下
+> Writing this mainly to document my learning and understanding, and to share it
 
-感兴趣可以阅读 **[源码](./src/index.tsx)** ，它非常精简，除了react，没有其它任何额外的东西，其中有几个关键要点：
+Feel free to read the **[source code](../src/index.tsx)**, which is very concise. Besides React, there are no other dependencies. Here are some key points:
 
-#### ① 不变的Context value
+#### ① Immutable Context value
 
-Context value变化的时候，需要递归遍历子树，寻找依赖它的节点进行更新，所以效率会很差
-* 所以，当状态变化时，通知组件状态的变更不能依赖 Context value 的改变
-* `value={useMemo(buildQuery, [])}` 就是为了保证其不发生变化
-* 变更通知，只能采用别的方式 —— 发布订阅
+When Context value changes, it needs to recursively traverse the subtree to find dependent nodes for updates, which is very inefficient.
+* Therefore, when state changes, notifying components of state changes cannot rely on Context value changes
+* `value={useMemo(buildQuery, [])}` ensures it doesn't change
+* Change notifications must use other methods — publish-subscribe
 
-#### ② 发布订阅（事件机制）
+#### ② Publish-Subscribe (Event mechanism)
 
-当状态变化时，发布订阅能做到精准的点对点更新（react-redux中其实也用到了发布订阅）
+When state changes, publish-subscribe enables precise point-to-point updates (react-redux also uses publish-subscribe internally)
 
-#### ③ 触发变更——偷梁换柱
+#### ③ Triggering changes — Bait and Switch
 
 ```tsx
 const { data, change, listen } = useContext(Context)(this);
@@ -61,14 +58,13 @@ const [v, set] = useState(data);
 useLayoutEffect(() => listen(set), []);
 return [v, change] as const;
 ```
-把变更函数 `set` 注册给监听器，替换为change（不仅修改数据，还会触发订阅更新）
-
+Register the change function `set` to the listener, replacing it with change (which not only modifies data but also triggers subscription updates)
 
 ## Usage Sample
 
-本方案一共只导出了2个API，使用非常简单:
-* atom: 用于定义状态
-* WithStore: 用于包裹组件树，提供状态上下文
+This solution exports only 2 APIs, making it very simple to use:
+* atom: for defining state
+* WithStore: for wrapping component trees, providing state context
 
 ### Basic Usage
 
@@ -76,9 +72,9 @@ return [v, change] as const;
 // define atoms with initial states
 import { atom } from 'react-no-redux';
 
-const a = atom(1);
-const b = atom('2');
-const c = atom<string[]>([]);
+const a = atom(1),
+const b = atom('2'),
+const c = atom<string[]>([]),
 
 // use atoms
 import { WithStore } from 'react-no-redux';
@@ -116,9 +112,9 @@ const App = () => (
 export default App;
 ```
 
-`useData` vs `useChange` 区别是什么
-* `useData`: 返回值和更新函数，当atom值变化时，当前组件会重新渲染。
-* `useChange`: 返回只有更新函数，当atom值变化时，当前组件不会重新渲染。
+What's the difference between `useData` vs `useChange`?
+* `useData`: Returns value and update function. When atom value changes, the current component will re-render.
+* `useChange`: Returns only the update function. When atom value changes, the current component will not re-render.
 
 ### Define atom with actions
 
@@ -129,7 +125,6 @@ const a = atom(1, (get, set) => {
   const dec = () => set(get() - 1);
   return { inc, dec };
 });
-
 
 // use atom
 const [value, actions] = a.useData();
@@ -151,9 +146,9 @@ return (
 );
 ```
 
-同样的，当使用 `useChange` 时，当前组件不会因为atom状态变化而重新渲染
+Similarly, when using `useChange`, the current component will not re-render due to atom state changes.
 
-actions 可以设置为任意函数，甚至可以是异步函数，例如：
+Actions can be set to any function, even async functions, for example:
 ```tsx
 const a = atom(1, (get, set) => {
   async function inc() {
@@ -164,7 +159,7 @@ const a = atom(1, (get, set) => {
 });
 ```
 
-在创建 actions 的函数中，甚至可以执行异步初始化的逻辑，比如这样一个场景，我们需要从服务器请求一个商品列表
+In the function that creates actions, you can even execute async initialization logic. For example, in a scenario where we need to request a product list from the server:
 ```tsx
 type Product = { /* ... */ };
 const products = atom([] as Product[], (get, set) => {
@@ -172,7 +167,7 @@ const products = atom([] as Product[], (get, set) => {
     const products = await fetchProductsFromServer();
     set(products);
   }
-  // 第一次使用 products.useXXX 时会自动调用 init 函数， 并且只会执行一次
+  // The init function will be automatically called when products.useXXX is first used, and only executed once
   init();
 
   function deleteProduct(id: string) {
@@ -182,7 +177,7 @@ const products = atom([] as Product[], (get, set) => {
 });
 ```
 
-创建 actions，还可以依赖查询其它 atom 的状态
+Creating actions can also depend on querying other atom states:
 ```tsx
 const a = atom(1);
 const b = atom(2);
@@ -191,7 +186,6 @@ const c = atom(3, (get, set, query) => {
   return { inc };
 });
 ```
-
 
 ### Define computed atom
 ```tsx
@@ -209,10 +203,10 @@ const value = c.useData();
 return <span>{value}</span>;
 ```
 
-注意，computed atom 只有 `useData`, 没有 `useChange`，因为它是只读的，不能直接修改。
+Note that computed atoms only have `useData`, not `useChange`, because they are read-only and cannot be directly modified.
 
 ## Compare with Jotai
-在jotai中需要引入单独的 API: `useAtom` `useSetAtom` `useAtomValue`
+In Jotai, you need to import separate APIs: `useAtom` `useSetAtom` `useAtomValue`
 ```tsx
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 
@@ -221,13 +215,13 @@ const atomValue = useAtomValue(a);
 const setAtomValue = useSetAtom(a);
 ```
 
-在本方案中，节省了导入的麻烦，直接使用 `a.useData()` 和 `a.useChange()` 即可
+In this solution, it saves the trouble of importing, directly use `a.useData()` and `a.useChange()`
 
-## work with immer
+## Work with immer
 
-对于复杂的嵌套对象状态，可以结合 [immer](https://github.com/immerjs/immer) 来实现不可变更新，让代码更简洁易读。
+For complex nested object states, you can combine with [immer](https://github.com/immerjs/immer) to achieve immutable updates, making code more concise and readable.
 
-### 基础用法
+### Basic Usage
 
 ```tsx
 import { produce } from 'immer';
@@ -283,7 +277,7 @@ const App = () => {
 };
 ```
 
-### 结合 actions 使用
+### Combined with actions
 
 ```tsx
 import { produce } from 'immer';
@@ -321,7 +315,7 @@ const todos = atom([] as Todo[], (get, set) => {
   return { addTodo, toggleTodo, removeTodo };
 });
 
-// 使用
+// Usage
 const TodoApp = () => {
   const [todoList, actions] = todos.useData();
 
@@ -344,31 +338,29 @@ const TodoApp = () => {
 };
 ```
 
+### 3 Ways to Call
 
-### 3种调用方式
-
-以 action 为例，在 `set` 方法中使用 immer时，有3种调用方式：
+Taking actions as an example, when using immer in the `set` method, there are 3 ways to call:
 
 ```tsx
-// 方式一：传入 get()
+// Method 1: Pass get()
 set(produce(get(), draft => {
   draft.push(newItem);
 }));
 
-// 方式二：使用函数形式
+// Method 2: Use function form
 set(current => produce(current, draft => {
   draft.push(newItem);
 }));
 
-// 方式三：curried form（这种是最简洁的）
+// Method 3: Curried form (this is the most concise)
 set(produce(draft => {
   draft.push(newItem);
 }));
 ```
 
-
-使用 immer 的好处：
-- **简化语法**：直接修改 draft 对象，无需手动创建新对象
-- **类型安全**：完全保持 TypeScript 类型推断
-- **性能优化**：immer 内部做了优化，只有真正改变的部分才会创建新对象
-- **减少错误**：避免手动深拷贝时可能出现的遗漏
+Benefits of using immer:
+- **Simplified syntax**: Directly modify draft objects without manually creating new objects
+- **Type safety**: Fully maintains TypeScript type inference
+- **Performance optimization**: immer is internally optimized, only truly changed parts create new objects
+- **Reduce errors**: Avoid potential omissions when manually deep copying

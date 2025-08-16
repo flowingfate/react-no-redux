@@ -1,4 +1,5 @@
-import React, { type ReactNode, createContext, useContext, useLayoutEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
 const uuid = () => Math.round((Math.random() + 1) * Date.now()).toString(36);
 const UNIQ = Symbol('BUILD');
