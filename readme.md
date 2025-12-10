@@ -182,12 +182,19 @@ const products = atom([] as Product[], (get, set) => {
 });
 ```
 
-创建 actions，还可以依赖查询其它 atom 的状态
+创建 actions，还可以依赖其它 atom
 ```tsx
 const a = atom(1);
 const b = atom(2);
-const c = atom(3, (get, set, query) => {
-  const inc = () => set(get() + query(a).data + query(b).data);
+const x = atom('hello');
+const c = atom(3, (get, set, use) => {
+  const inc = () => {
+    const a_value = use(a)[0];
+    const b_value = use(b)[0];
+    const [x_value, change_x] = use(x);
+    set(get() + a_value + b_value);
+    change_x(x_value + 'world!');
+  };
   return { inc };
 });
 ```
@@ -198,10 +205,10 @@ const c = atom(3, (get, set, query) => {
 // define atom
 const a = atom(1);
 const b = atom(2);
-const c = atom((query) => {
-  const state_a = query(a);
-  const state_b = query(b);
-  return state_a.data + state_b.data;
+const c = atom((use) => {
+  const a_value = use(a);
+  const b_value = use(b);
+  return a_value + b_value;
 });
 
 // use atom

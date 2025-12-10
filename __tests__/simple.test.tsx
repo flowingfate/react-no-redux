@@ -3,17 +3,17 @@ import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { atom, WithStore } from '../src';
 
+const a_atom = atom(1);
 const store = {
-  a: atom(1),
+  a: a_atom,
   b: atom('2'),
   c: atom<string[]>(['1', '2', '3']),
   d: atom(0, (get, set) => ({
     increment: () => set(get() + 1),
     decrement: () => set(get() - 1),
   })),
-  e: atom((query) => {
-    const aValue = query(store.a).data as number;
-    return aValue * 2;
+  e: atom((use) => {
+    return use(a_atom) * 2;
   }),
 };
 

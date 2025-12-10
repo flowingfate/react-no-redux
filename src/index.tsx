@@ -7,7 +7,7 @@ const UNIQ = Symbol('BUILD');
 type Caller<T> = (data: T) => void;
 type Listen<T> = (cb: Caller<T>) => VoidFunction;
 type Reduce<T> = (data: T) => T;
-type Creator<T, A> = (get: () => T, set: Change<T>, query: Query) => A;
+type Creator<T, A> = (get: () => T, set: Change<T>, use: UseAtom) => A;
 export type Change<T> = (ch: Reduce<T> | T) => void;
 
 interface ValueState<T> {
@@ -32,6 +32,12 @@ export interface Query {
   <T>(atom: ValueAtom<T>): ValueState<T>;
   <T>(atom: AnyAtom<T>): ReadonlyState<T>;
 }
+export interface UseAtom {
+  <T>(atom: ComputedAtom<T>): T;
+  <T, A>(atom: ActionAtom<T, A>): [T, A];
+  <T>(atom: ValueAtom<T>): [T, Change<T>];
+}
+export type UseData = <T>(atom: AnyAtom<T>) => T;
 
 function generate<T>(data: T) {
   const listener = new Set<Caller<T>>();
@@ -59,13 +65,13 @@ function bind<T>(data: T, listen: Listen<T>) {
 class ValueAtom<T> {
   public readonly type = 'v' as const;
   public readonly key = uuid();
-  public proxy?: Creator<T, Change<T>>;
+  public proxy?: (get: () => T, set: Change<T>) => Change<T>;
   constructor(private init: T) {}
 
-  public [UNIQ](query: Query): ValueState<T> {
+  public [UNIQ](): ValueState<T> {
     const state = generate(this.init);
     if (this.proxy) {
-      state.change = this.proxy(() => state.data, state.change, query);
+      state.change = this.proxy(() => state.data, state.change);
     }
     return state;
   }
@@ -93,7 +99,21 @@ class ActionAtom<T, A> {
 
   public [UNIQ](query: Query): ActionState<T, A> {
     const state = generate(this.init);
-    const actions = this.creator(() => state.data, state.change, query);
+    function use(atom: AnyAtom) {
+      switch (atom.type) {
+        case 'c': return query(atom).data;
+        case 'v': {
+          const state = query(atom);
+          return [state.data, state.change];
+        }
+        case 'a': {
+          const state = query(atom);
+          return [state.data, state.actions];
+        }
+        default: throw new Error('Unrecognized atom type');
+      }
+    }
+    const actions = this.creator(() => state.data, state.change, use);
     Object.assign(state, { actions });
     return state as any;
   }
@@ -111,14 +131,15 @@ class ActionAtom<T, A> {
 class ComputedAtom<T> {
   public readonly type = 'c' as const;
   public readonly key = uuid();
-  constructor(private readonly calc: (query: Query) => T) {}
+  constructor(private readonly calc: (use: UseData) => T) {}
 
   public [UNIQ](query: Query): ReadonlyState<T> {
     const deps: AnyAtom[] = [];
-    const q = (atom: AnyAtom) => (deps.push(atom), query(atom));
-    const state = generate(this.calc(q as Query));
+    let use = (atom: AnyAtom) => (deps.push(atom), query(atom).data);
+    const state = generate(this.calc(use));
     if (deps.length > 0) {
-      const update = () => state.change(this.calc(query));
+      use = (atom: AnyAtom) => query(atom).data;
+      const update = () => state.change(this.calc(use));
       deps.forEach((a) => query(a).listen(update));
     }
     return state;
@@ -145,7 +166,7 @@ function buildQuery() {
   return query as Query;
 }
 
-export function atom<T>(initial: (query: Query) => T): ComputedAtom<T>;
+export function atom<T>(initial: (use: UseData) => T): ComputedAtom<T>;
 export function atom<T, A>(initial: T, creator: Creator<T, A>): ActionAtom<T, A>;
 export function atom<T>(initial: T): ValueAtom<T>;
 export function atom(a: any, b?: any) {
