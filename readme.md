@@ -18,9 +18,6 @@
 * 与Typescript配合不够友好，
 * 使用过程过于繁琐，强行增加人的认知成本
 
-更多关于Redux的考量参见这里 **[Redux的问题](./docs/no-redux.md)**
-
-
 新兴的状态管理，例如 Jotai 、Recoil、Zustand 等等，他们都足够轻量好用，本方案也是旨在提供和他们一样好的体验
 
 React 本身就提供了Context用于跨组件通信，一个好的状态管理，无非就是对原生Context的用法进行优化，使得：
@@ -30,7 +27,7 @@ React 本身就提供了Context用于跨组件通信，一个好的状态管理�
 
 ## Goal
 
-* 足够轻量小巧
+* 足够轻量小巧，但功能齐全
 * 足够类型健壮
 * 概念少，结构完全透明，使用简单
 * 支持多实例（不像Redux那样使用单例），可以在任意局部灵活使用
@@ -64,116 +61,122 @@ return [v, change] as const;
 把变更函数 `set` 注册给监听器，替换为change（不仅修改数据，还会触发订阅更新）
 
 
-## Usage Sample
+## Usage
 
 本方案一共只导出了2个API，使用非常简单:
-* atom: 用于定义状态
-* WithStore: 用于包裹组件树，提供状态上下文
+* `atom`: 用于定义状态
+* `WithStore`: 用于包裹组件树，提供状态上下文
 
-### Basic Usage
+`<WithStore>...</WithStore>` 只需要套在应用的最外层即可。
+
+首先了解两个类型定义，后文多次提到的 `set` 函数，类型均为 `Change<T>`, 行为与 `React.useState` 的 setter 一致。
+
+```ts
+type Reduce<T> = (data: T) => T;
+type Change<T> = (ch: Reduce<T> | T) => void;
+```
+
+通过 `atom` 函数可以创建 3 种类型的原子：
+
+### 1. Value Atom
+基础的用法如下：
 
 ```tsx
-// define atoms with initial states
-import { atom } from 'react-no-redux';
+const priceAtom = atom(100);
 
-const a = atom(1);
-const b = atom('2');
-const c = atom<string[]>([]);
+function Component1() {
+  const [price, set] = priceAtom.useData();
+  return <div>{price}</div>;
+}
 
-// use atoms
-import { WithStore } from 'react-no-redux';
-
-const BizA = () => {
-  const [a, setA] = a.useData();
-  const [b] = b.useData();
-  const setC = c.useChange();
-  const addA = () => setA(a + 1);
-  const removeB = () => setC(list => list.filter(item => (item !== b)));
-  return (
-    <>
-      <button onClick={addA}>{a}</button>
-      <button onClick={removeB}>{b}</button>
-    </>
-  );
-};
-
-const BizB  = () => {
-  const [list] = c.useData();
-  return (
-    <div>
-      {list.map(item => <span>{item}</span>)}
-    </div>
-  );
-};
-
-const App = () => (
-  <WithStore>
-    <div><BizA /></div>
-    <div><BizB /></div>
-  </WithStore>
-);
-
-export default App;
+function Component2() {
+  const set = priceAtom.useChange();
+  return <button onClick={() => set(150)}>increase</button>;
+}
 ```
 
 `useData` vs `useChange` 区别是什么
 * `useData`: 返回值和更新函数，当atom值变化时，当前组件会重新渲染。
 * `useChange`: 返回只有更新函数，当atom值变化时，当前组件不会重新渲染。
 
-### Define atom with actions
+### 2. Action Atom
+在 Value Atom 的基础上，增加了定义一组预定义操作的能力：
 
 ```tsx
-// define atom
-const a = atom(1, (get, set) => {
-  const inc = () => set(get() + 1);
-  const dec = () => set(get() - 1);
-  return { inc, dec };
+// 这里 `get` 总是拿到最新的值，`set` 的类型是 `Change<T>`
+const priceAtom = atom(100, (get, set) => {
+  return {
+    increase: (delta: number) => set(get() + delta),
+    decrease: (delta: number) => set((prev) => prev - delta),
+  };
 });
 
+function Component1() {
+  const [price, actions] = priceAtom.useData();
+  return <div>{price}</div>;
+}
 
-// use atom
-const [value, actions] = a.useData();
-return (
-  <>
-    <button onClick={actions.inc}>+</button>
-    <span>{value}</span>
-    <button onClick={actions.dec}>-</button>
-  </>
-);
-
-// use only actions
-const actions = a.useChange();
-return (
-  <>
-    <button onClick={actions.inc}>+</button>
-    <button onClick={actions.dec}>-</button>
-  </>
-);
+function Component2() {
+  // 同样使用 useChange 时，priceAtom 的值发生变化不会导致 Component2 重新渲染
+  const actions = priceAtom.useChange();
+  return <button onClick={() => actions.increase(1)}>increase</button>;
+}
 ```
+通过 Action Atom，可以按需的把一些复杂的操作封装成函数，方便在不同的组件中复用。
+这里要封装的函数可以是同步的，也可以是异步的，比如可以从服务器拉取数据后，根据结果更新 atom 的值，这就给了我们机会将一些通用的业务操作提炼为共用逻辑。
 
-同样的，当使用 `useChange` 时，当前组件不会因为atom状态变化而重新渲染
+### 3. Computed Atom
+这是一种只读原子，它的值是通过其他原子计算得来的：
 
-actions 可以设置为任意函数，甚至可以是异步函数，例如：
 ```tsx
-const a = atom(1, (get, set) => {
-  async function inc() {
-    const result = await fetchDataFromServer();
-    set(get() + result);
+const priceAtom = atom(100);
+const taxAtom = atom(0.1);
+const totalAtom = atom((use) => use(priceAtom) * (1 + use(taxAtom)));
+
+function Component() {
+  // computed atom 只能使用 useData 来获取值，没有 useChange 方法，也无法改变数据
+  const total = totalAtom.useData();
+  return <div>{total}</div>;
+}
+```
+创建 atom 时，使用的 `use` 方法，可以传入任意其他类型的 atom（包括 value atom, action atom, computed atom）返回其携带的值。并且会自动订阅它们的变化，从而在依赖的 atom 变化时，重新计算自己的值。
+
+## Advanced Usage
+
+### 1. Action Atom 也可以读取和修改其它 atom
+
+```ts
+const a = atom(1);
+const b = atom(2);
+const c = atom(3, (get, set, use) => {
+  function add(delta: number) {
+    const [a_val, setA] = use(a);
+    const [b_val, setB] = use(b);
+    set(a_val + b_val + delta * 2);
+    setA(a_val + delta);
+    setB(b_val + delta);
   }
-  return { inc };
+  return { add };
 });
 ```
 
-在创建 actions 的函数中，甚至可以执行异步初始化的逻辑，比如这样一个场景，我们需要从服务器请求一个商品列表
-```tsx
+可见创建 action atom 时，也可以获得一个 `use` 方法，这个方法也可以接受其它任意类型的 atom，但这个方法很灵活：
+* 当传入 value atom 时： 会返回一个 `[value, set]` 的元组
+* 当传入 action atom 时： 会返回一个 `[value, actions]` 的元组
+* 当传入 computed atom 时： 只会返回它的值
+
+这个 `use` 用起来很像 React 里的 hooks，所以很好理解。但需要注意的是：`use` 每次调用都会获取其他 atom 的最新值，但不会建立订阅关系，其它 atom 的变化不会触发 action 函数重新执行。
+
+### 2. 异步初始化
+有的时候，我们希望 atom 的初始值来自服务器，但这个异步过程并不适合放在组件里执行，此时可以这么来巧妙的实现：
+
+```ts
 type Product = { /* ... */ };
-const products = atom([] as Product[], (get, set) => {
-  async function init() {
-    const products = await fetchProductsFromServer();
-    set(products);
+const productsAtom = atom([] as Product[], (get, set) => {
+  async function initialize() {
+    set(await fetchProductsFromServer());
   }
-  // 第一次使用 products.useXXX 时会自动调用 init 函数， 并且只会执行一次
-  init();
+  initialize();
 
   function deleteProduct(id: string) {
     set(get().filter(product => product.id !== id));
@@ -182,179 +185,48 @@ const products = atom([] as Product[], (get, set) => {
 });
 ```
 
-创建 actions，还可以依赖其它 atom
-```tsx
-const a = atom(1);
-const b = atom(2);
-const x = atom('hello');
-const c = atom(3, (get, set, use) => {
-  const inc = () => {
-    const a_value = use(a)[0];
-    const b_value = use(b)[0];
-    const [x_value, change_x] = use(x);
-    set(get() + a_value + b_value);
-    change_x(x_value + 'world!');
-  };
-  return { inc };
-});
-```
+这里的 `initialize` 函数并不会立刻就执行，它只会在这个 productsAtom 第一次被 use 的时候才会调用，并且只会调用一次。注意，这里说的 use 包括 3 种情况：
+* 被其它 computed atom 依赖 use
+* 被其它 action atom 依赖的时候 use
+* 组件中调用 productsAtom.useXXX
 
+依此类推，这种异步初始化的策略，也适合其它场景。
 
-### Define computed atom
-```tsx
-// define atom
-const a = atom(1);
-const b = atom(2);
-const c = atom((use) => {
-  const a_value = use(a);
-  const b_value = use(b);
-  return a_value + b_value;
-});
-
-// use atom
-const value = c.useData();
-return <span>{value}</span>;
-```
-
-注意，computed atom 只有 `useData`, 没有 `useChange`，因为它是只读的，不能直接修改。
-
-## Compare with Jotai
-在jotai中需要引入单独的 API: `useAtom` `useSetAtom` `useAtomValue`
-```tsx
-import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-
-const [atomValue, setAtomValue] = useAtom(a);
-const atomValue = useAtomValue(a);
-const setAtomValue = useSetAtom(a);
-```
-
-在本方案中，节省了导入的麻烦，直接使用 `a.useData()` 和 `a.useChange()` 即可
-
-## work with immer
-
-对于复杂的嵌套对象状态，可以结合 [immer](https://github.com/immerjs/immer) 来实现不可变更新，让代码更简洁易读。
-
-### 基础用法
+### 3. 结合 immer（或mutative等） 使用
+当 atom 的值是一个复杂对象时，直接修改这个对象会比较麻烦，这里以 immer 为例来简化操作：
 
 ```tsx
 import { produce } from 'immer';
-import { atom, WithStore } from 'react-no-redux';
+type Product = { /* ... */ };
+const productsAtom = atom([] as Product[]);
 
-type Product = {
-  id: number;
-  name: string;
-  price: number;
-};
-
-const products = atom([] as Product[]);
-
-const App = () => {
-  const [list, setList] = products.useData();
-
-  const addProduct = () => {
-    setList(produce(draft => {
-      draft.push({ id: Date.now(), name: 'New Product', price: 100 });
+function Component() {
+  const setProducts = productsAtom.useChange();
+  function add(item: Product) {
+    setProducts(produce((draft) => {
+      draft.push(item);
     }));
-  };
-
-  const updateFirstProduct = () => {
-    setList(produce(draft => {
-      if (draft[0]) {
-        draft[0].name = 'Updated Product';
-        draft[0].price = 200;
-      }
-    }));
-  };
-
-  const removeProduct = (id: number) => {
-    setList(produce(draft => {
-      const index = draft.findIndex(p => p.id === id);
-      if (index !== -1) draft.splice(index, 1);
-    }));
-  };
-
-  return (
-    <WithStore>
-      <button onClick={addProduct}>Add Product</button>
-      <button onClick={updateFirstProduct}>Update First</button>
-      <div>
-        {list.map(product => (
-          <div key={product.id}>
-            {product.name} - ${product.price}
-            <button onClick={() => removeProduct(product.id)}>Remove</button>
-          </div>
-        ))}
-      </div>
-    </WithStore>
-  );
-};
+  }
+  return (/* ... */);
+}
 ```
 
-### 结合 actions 使用
+或者在 Action Atom 中使用：
 
-```tsx
+```ts
 import { produce } from 'immer';
-import { atom } from 'react-no-redux';
-
-type Todo = {
-  id: number;
-  text: string;
-  completed: boolean;
-};
-
-const todos = atom([] as Todo[], (get, set) => {
-  const addTodo = (text: string) => {
-    set(produce(get(), draft => {
-      draft.push({ id: Date.now(), text, completed: false });
+type Product = { /* ... */ };
+const productsAtom = atom([] as Product[], (get, set) => {
+  function add(item: Product) {
+    set(produce((draft) => {
+      draft.push(item);
     }));
-  };
-  const toggleTodo = (id: number) => {
-    set(produce(get(), draft => {
-      const todo = draft.find(t => t.id === id);
-      if (todo) {
-        todo.completed = !todo.completed;
-      }
-    }));
-  };
-  const removeTodo = (id: number) => {
-    set(produce(get(), draft => {
-      const index = draft.findIndex(t => t.id === id);
-      if (index !== -1) {
-        draft.splice(index, 1);
-      }
-    }));
-  };
-
-  return { addTodo, toggleTodo, removeTodo };
+  }
+  return { add };
 });
-
-// 使用
-const TodoApp = () => {
-  const [todoList, actions] = todos.useData();
-
-  return (
-    <div>
-      <button onClick={() => actions.addTodo('New Task')}>Add Todo</button>
-      {todoList.map(todo => (
-        <div key={todo.id}>
-          <span
-            style={{ textDecoration: todo.completed ? 'line-through' : 'none' }}
-            onClick={() => actions.toggleTodo(todo.id)}
-          >
-            {todo.text}
-          </span>
-          <button onClick={() => actions.removeTodo(todo.id)}>Delete</button>
-        </div>
-      ))}
-    </div>
-  );
-};
 ```
 
-
-### 3种调用方式
-
-以 action 为例，在 `set` 方法中使用 immer时，有3种调用方式：
+以 action atom 为例，配合 `set` 方法使用 immer时，有3种调用方式：
 
 ```tsx
 // 方式一：传入 get()
@@ -379,3 +251,16 @@ set(produce(draft => {
 - **类型安全**：完全保持 TypeScript 类型推断
 - **性能优化**：immer 内部做了优化，只有真正改变的部分才会创建新对象
 - **减少错误**：避免手动深拷贝时可能出现的遗漏
+
+
+## Compare with Jotai
+在jotai中需要引入单独的 API: `useAtom` `useSetAtom` `useAtomValue`
+```tsx
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
+
+const [atomValue, setAtomValue] = useAtom(a);
+const atomValue = useAtomValue(a);
+const setAtomValue = useSetAtom(a);
+```
+
+在本方案中，节省了导入的麻烦，直接使用 `a.useData()` 和 `a.useChange()` 即可
