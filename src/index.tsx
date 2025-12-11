@@ -1,30 +1,24 @@
 import React, { createContext, useContext, useLayoutEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FC } from 'react';
 
 const uuid = () => Math.round((Math.random() + 1) * Date.now()).toString(36);
 const UNIQ = Symbol('BUILD');
 
-type Caller<T> = (data: T) => void;
-type Listen<T> = (cb: Caller<T>) => VoidFunction;
+type Listen<T> = (cb: (data: T) => void) => VoidFunction;
 type Reduce<T> = (data: T) => T;
 type Creator<T, A> = (get: () => T, set: Change<T>, use: UseAtom) => A;
 export type Change<T> = (ch: Reduce<T> | T) => void;
-
-interface ValueState<T> {
-  data: T;
-  change: Change<T>;
-  listen: Listen<T>;
-}
-interface ActionState<T, A> {
-  data: T;
-  actions: A;
-  listen: Listen<T>;
-}
 interface ReadonlyState<T> {
-  data: T;
+  get: () => T;
   listen: Listen<T>;
+  useData: () => T;
 }
-
+interface ValueState<T> extends ReadonlyState<T> {
+  change: Change<T>;
+}
+interface ActionState<T, A> extends ReadonlyState<T> {
+  actions: A;
+}
 export type AnyAtom<T = any> = ValueAtom<T> | ActionAtom<T, any> | ComputedAtom<T>;
 export interface Query {
   <T>(atom: ComputedAtom<T>): ReadonlyState<T>;
@@ -39,27 +33,23 @@ export interface UseAtom {
 }
 export type UseData = <T>(atom: AnyAtom<T>) => T;
 
-function generate<T>(data: T) {
-  const listener = new Set<Caller<T>>();
-  const change = (ch: Reduce<T> | T) => {
-    const prev = state.data;
-    const next = (typeof ch === 'function') ? (ch as Reduce<T>)(prev) : ch;
-    if (prev === next) return;
-    state.data = next;
+function generate<T>(val: T) {
+  const listener = new Set<(val: T) => void>();
+  const change: Change<T> = (ch) => {
+    const next = (typeof ch === 'function') ? (ch as Reduce<T>)(val) : ch;
+    if (val === next) return;
+    val = next;
     listener.forEach(call => call(next));
   };
   const listen: Listen<T> = (call) => {
     listener.add(call);
     return () => listener.delete(call);
   };
-  const state = { data, change, listen };
-  return state;
-}
-
-function bind<T>(data: T, listen: Listen<T>) {
-  const [v, set] = useState(data);
-  useLayoutEffect(() => listen(set), []);
-  return v;
+  const useData = () => {
+    const [v, set] = useState(val);
+    return (useLayoutEffect(() => listen(set), []), v);
+  };
+  return { get: () => val, change, listen, useData };
 }
 
 class ValueAtom<T> {
@@ -71,21 +61,17 @@ class ValueAtom<T> {
   public [UNIQ](): ValueState<T> {
     const state = generate(this.init);
     if (this.proxy) {
-      state.change = this.proxy(() => state.data, state.change);
+      state.change = this.proxy(state.get, state.change);
     }
     return state;
   }
 
-  public action<A>(creator: Creator<T, A>) {
-    return new ActionAtom(this.init, creator);
+  public useData(): [T, Change<T>] {
+    const { useData, change } = useContext(Context)(this);
+    return [useData(), change];
   }
 
-  public useData() {
-    const { data, change, listen } = useContext(Context)(this);
-    return [bind(data, listen), change] as const;
-  }
-
-  public useChange() {
+  public useChange(): Change<T> {
     return useContext(Context)(this).change;
   }
 }
@@ -101,29 +87,28 @@ class ActionAtom<T, A> {
     const state = generate(this.init);
     function use(atom: AnyAtom) {
       switch (atom.type) {
-        case 'c': return query(atom).data;
+        case 'c': return query(atom).get();
         case 'v': {
-          const state = query(atom);
-          return [state.data, state.change];
+          const { get, change } = query(atom);
+          return [get(), change];
         }
         case 'a': {
-          const state = query(atom);
-          return [state.data, state.actions];
+          const { get, actions } = query(atom);
+          return [get(), actions];
         }
-        default: throw new Error('Unrecognized atom type');
       }
     }
-    const actions = this.creator(() => state.data, state.change, use);
+    const actions = this.creator(state.get, state.change, use);
     Object.assign(state, { actions });
     return state as any;
   }
 
-  public useData() {
-    const { data, actions, listen } = useContext(Context)(this);
-    return [bind(data, listen), actions] as const;
+  public useData(): [T, A] {
+    const { useData, actions } = useContext(Context)(this);
+    return [useData(), actions];
   }
 
-  public useChange() {
+  public useChange(): A {
     return useContext(Context)(this).actions;
   }
 }
@@ -135,35 +120,19 @@ class ComputedAtom<T> {
 
   public [UNIQ](query: Query): ReadonlyState<T> {
     const deps: AnyAtom[] = [];
-    let use = (atom: AnyAtom) => (deps.push(atom), query(atom).data);
+    let use = (atom: AnyAtom) => (deps.push(atom), query(atom).get());
     const state = generate(this.calc(use));
     if (deps.length > 0) {
-      use = (atom: AnyAtom) => query(atom).data;
+      use = (atom: AnyAtom) => query(atom).get();
       const update = () => state.change(this.calc(use));
       deps.forEach((a) => query(a).listen(update));
     }
     return state;
   }
 
-  public useData() {
-    const { data, listen } = useContext(Context)(this);
-    return bind(data, listen);
+  public useData(): T {
+    return useContext(Context)(this).useData();
   }
-}
-
-function buildQuery() {
-  const map: { [k: string]: any } = {};
-  function query(atom: AnyAtom) {
-    const { key } = atom;
-    let state = map[key];
-    if (state === undefined) {
-      /* dynamically register atom state */
-      state = atom[UNIQ](query as Query);
-      map[key] = state;
-    }
-    return state;
-  }
-  return query as Query;
 }
 
 export function atom<T>(initial: (use: UseData) => T): ComputedAtom<T>;
@@ -175,9 +144,12 @@ export function atom(a: any, b?: any) {
   return new ValueAtom(a);
 }
 
-const Context = createContext({} as Query);
-export const WithStore = (props: { children: ReactNode }) => (
-  <Context.Provider value={useMemo(buildQuery, [])}>
-    {props.children}
-  </Context.Provider>
-);
+function build(): Query {
+  const map: { [k: string]: any } = {};
+  return function query(atom: AnyAtom) {
+    return map[atom.key] || (map[atom.key] = atom[UNIQ](query));
+  }
+}
+const Context = createContext(build());
+const Root = Context.Provider;
+export const WithStore: FC = (p) => <Root value={useMemo(build, [])}>{p.children}</Root>;

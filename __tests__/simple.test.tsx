@@ -17,7 +17,7 @@ const store = {
   }),
 };
 
-describe('Unit test for react-no-redux', () => {
+describe('Unit test for Simple cases', () => {
   it('Basic-Usage', () => {
     let stateOfA: any = {};
     let stateOfB: any = {};
@@ -120,35 +120,6 @@ describe('Unit test for react-no-redux', () => {
 
     fireEvent.click(screen.getByTestId('update-a'));
     expect(screen.getByTestId('computed').textContent).toBe('4'); // a=2, computed=2*2=4
-  });
-
-  it('atom action method creates ActionAtom', () => {
-    const baseAtom = atom(10);
-    const actionAtom = baseAtom.action((get, set) => ({
-      double: () => set(get() * 2)
-    }));
-
-    const TestComponent = () => {
-      const [value, actions] = actionAtom.useData();
-      return (
-        <div>
-          <span data-testid="action-value">{value}</span>
-          <button data-testid="double-btn" onClick={actions.double}>Double</button>
-        </div>
-      );
-    };
-
-    const App = () => (
-      <WithStore>
-        <TestComponent />
-      </WithStore>
-    );
-
-    render(<App />);
-    expect(screen.getByTestId('action-value').textContent).toBe('10');
-
-    fireEvent.click(screen.getByTestId('double-btn'));
-    expect(screen.getByTestId('action-value').textContent).toBe('20');
   });
 
   it('BasicAtom with proxy functionality', () => {
