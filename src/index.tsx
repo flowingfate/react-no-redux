@@ -76,6 +76,25 @@ class ValueAtom<T> {
   }
 }
 
+const _q_2_u_ = new WeakMap<Query, UseAtom>();
+function buildUseFromQuery(query: Query): UseAtom {
+  if (_q_2_u_.has(query)) return _q_2_u_.get(query);
+  function use(atom: AnyAtom) {
+    switch (atom.type) {
+      case 'c': return query(atom).get();
+      case 'v': {
+        const { get, change } = query(atom);
+        return [get(), change];
+      }
+      case 'a': {
+        const { get, actions } = query(atom);
+        return [get(), actions];
+      }
+    }
+  }
+  return (_q_2_u_.set(query, use), use);
+}
+
 class ActionAtom<T, A> {
   public readonly type = 'a' as const;
   public readonly key = uuid();
@@ -85,19 +104,7 @@ class ActionAtom<T, A> {
 
   public [UNIQ](query: Query): ActionState<T, A> {
     const state = generate(this.init);
-    function use(atom: AnyAtom) {
-      switch (atom.type) {
-        case 'c': return query(atom).get();
-        case 'v': {
-          const { get, change } = query(atom);
-          return [get(), change];
-        }
-        case 'a': {
-          const { get, actions } = query(atom);
-          return [get(), actions];
-        }
-      }
-    }
+    const use = buildUseFromQuery(query);
     const actions = this.creator(state.get, state.change, use);
     Object.assign(state, { actions });
     return state as any;
@@ -153,3 +160,15 @@ function build(): Query {
 const Context = createContext(build());
 const Root = Context.Provider;
 export const WithStore: FC = (p) => <Root value={useMemo(build, [])}>{p.children}</Root>;
+
+export function mutate<T extends Function>(init: (use: UseAtom) => T) {
+  const cache = new WeakMap<Query, T>();
+  return {
+    use(): T {
+      const query = useContext(Context);
+      if (cache.has(query)) return cache.get(query);
+      const result = init(buildUseFromQuery(query));
+      return (cache.set(query, result), result);
+    }
+  }
+}

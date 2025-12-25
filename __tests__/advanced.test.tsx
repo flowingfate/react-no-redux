@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest'
-import { atom, WithStore } from '../src';
+import { atom, WithStore, mutate } from '../src';
 import { render, fireEvent, screen } from '@testing-library/react';
 
 
@@ -58,5 +58,50 @@ describe('Advanced case', () => {
     expect(screen.getByTestId('val_c').textContent).toBe('10');
     expect(screen.getByTestId('val_d').textContent).toBe('200');
     expect(screen.getByTestId('val_x').textContent).toBe('116');
+  });
+
+  it('mutate api usage', () => {
+    const price1Atom = atom(100);
+    const price2Atom = atom(200);
+    const totalAtom = atom((use) => use(price1Atom) + use(price2Atom));
+
+    const discountMutation = mutate((use) => (percent: number) => {
+      const [price1, setPrice1] = use(price1Atom);
+      const [price2, setPrice2] = use(price2Atom);
+      setPrice1(price1 * percent);
+      setPrice2(price2 * percent);
+    });
+
+    const App = () => {
+      const [price1] = price1Atom.useData();
+      const [price2] = price2Atom.useData();
+      const total = totalAtom.useData();
+      const discount = discountMutation.use();
+
+      return (
+        <>
+          <div data-testid="price1">{price1}</div>
+          <div data-testid="price2">{price2}</div>
+          <div data-testid="total">{total}</div>
+          <button onClick={() => discount(0.5)}>half</button>
+        </>
+      );
+    };
+
+    render(
+      <WithStore>
+        <App />
+      </WithStore>
+    );
+
+    expect(screen.getByTestId('price1').textContent).toBe('100');
+    expect(screen.getByTestId('price2').textContent).toBe('200');
+    expect(screen.getByTestId('total').textContent).toBe('300');
+
+    fireEvent.click(screen.getByText('half'));
+
+    expect(screen.getByTestId('price1').textContent).toBe('50');
+    expect(screen.getByTestId('price2').textContent).toBe('100');
+    expect(screen.getByTestId('total').textContent).toBe('150');
   });
 });

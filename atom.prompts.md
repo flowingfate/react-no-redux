@@ -2,7 +2,7 @@ Atom 是一个精巧的状态管理方案
 * 只依赖 react 本身
 * 代码很少，但功能齐全
 * 类型系统足够健壮
-* 核心 API 只有 2 个：`atom` (定义状态) 和 `WithStore` (根组件 Provider)
+* 核心 API 只有 3 个：`atom` (定义状态)、`WithStore` (根组件 Provider) 和 `mutate` (定义一组操作)
 
 `<WithStore>...</WithStore>` 只需要套在应用的最外层即可，此处不赘述
 
@@ -148,4 +148,24 @@ const productsAtom = atom([] as Product[], (get, set) => {
   }
   return { add };
 });
+```
+
+### 4. 使用 mutate 定义一组操作
+当我们需要对多个 atom 进行联合操作时，可以使用 mutate 定义可复用的函数
+```ts
+const price1Atom = atom(100);
+const price2Atom = atom(200);
+
+const discountMutation = mutate((use) => (percent: number) => {
+    const [price1, setPrice1] = use(price1Atom);
+    const [price2, setPrice2] = use(price2Atom);
+    setPrice1(price1 * percent);
+    setPrice2(price2 * percent);
+  },
+});
+
+function Component() {
+  const discount = discountMutation.use();
+  return <button onClick={() => discount(0.1)}>打折</button>;
+}
 ```
