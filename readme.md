@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/flowingfate/react-no-redux.svg?branch=master)](https://travis-ci.org/flowingfate/react-no-redux)
 [![codecov](https://codecov.io/gh/flowingfate/react-no-redux/branch/master/graph/badge.svg)](https://codecov.io/gh/flowingfate/react-no-redux)
-![react](https://img.shields.io/badge/react-^16.8.0-blue.svg)
+![react](https://img.shields.io/badge/react-^18-blue.svg)
 ![lang](https://img.shields.io/badge/lang-typescript-red.svg)
 ![npm](https://img.shields.io/npm/v/react-no-redux)
 ![GitHub file size in bytes](https://img.shields.io/github/size/flowingfate/react-no-redux/src/index.tsx)
@@ -53,19 +53,19 @@ Context value变化的时候，需要递归遍历子树，寻找依赖它的节�
 #### ③ 触发变更——偷梁换柱
 
 ```tsx
-const { data, change, listen } = useContext(Context)(this);
-const [v, set] = useState(data);
-useLayoutEffect(() => listen(set), []);
+const { get, listen, change } = useContext(Context)(this);
+const v = useSyncExternalStore(listen, get, get);
 return [v, change] as const;
 ```
-把变更函数 `set` 注册给监听器，替换为change（不仅修改数据，还会触发订阅更新）
+使用 useSyncExternalStore 来订阅状态变化，及时出发组件更新
 
 
 ## Usage
 
-本方案一共只导出了2个API，使用非常简单:
+本方案一共只导出了3个API，使用非常简单:
 * `atom`: 用于定义状态
 * `WithStore`: 用于包裹组件树，提供状态上下文
+* `mutate`: 用于定义一组操作
 
 `<WithStore>...</WithStore>` 只需要套在应用的最外层即可。
 
@@ -251,6 +251,26 @@ set(produce(draft => {
 - **类型安全**：完全保持 TypeScript 类型推断
 - **性能优化**：immer 内部做了优化，只有真正改变的部分才会创建新对象
 - **减少错误**：避免手动深拷贝时可能出现的遗漏
+
+### 4. 使用 mutate 定义一组操作
+当我们需要对多个 atom 进行联合操作时，可以使用 mutate 定义可复用的函数
+```ts
+const price1Atom = atom(100);
+const price2Atom = atom(200);
+
+const discountMutation = mutate((use) => (percent: number) => {
+    const [price1, setPrice1] = use(price1Atom);
+    const [price2, setPrice2] = use(price2Atom);
+    setPrice1(price1 * percent);
+    setPrice2(price2 * percent);
+  },
+});
+
+function Component() {
+  const discount = discountMutation.use();
+  return <button onClick={() => discount(0.1)}>打折</button>;
+}
+```
 
 
 ## Compare with Jotai

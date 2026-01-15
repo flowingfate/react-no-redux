@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useLayoutEffect, useMemo, useState } from 'react';
-import type { FC } from 'react';
+import React, { createContext, useContext, useMemo, useSyncExternalStore } from 'react';
+import type { FC, PropsWithChildren } from 'react';
 
 const uuid = () => Math.round((Math.random() + 1) * Date.now()).toString(36);
 const UNIQ = Symbol('BUILD');
@@ -11,7 +11,7 @@ export type Change<T> = (ch: Reduce<T> | T) => void;
 interface ReadonlyState<T> {
   get: () => T;
   listen: Listen<T>;
-  useData: () => T;
+  use: () => T;
 }
 interface ValueState<T> extends ReadonlyState<T> {
   change: Change<T>;
@@ -37,7 +37,7 @@ function generate<T>(val: T) {
   const listener = new Set<(val: T) => void>();
   const change: Change<T> = (ch) => {
     const next = (typeof ch === 'function') ? (ch as Reduce<T>)(val) : ch;
-    if (val === next) return;
+    if (Object.is(val, next)) return;
     val = next;
     listener.forEach(call => call(next));
   };
@@ -45,11 +45,9 @@ function generate<T>(val: T) {
     listener.add(call);
     return () => listener.delete(call);
   };
-  const useData = () => {
-    const [v, set] = useState(val);
-    return (useLayoutEffect(() => listen(set), []), v);
-  };
-  return { get: () => val, change, listen, useData };
+  const get = () => val;
+  const use = () => useSyncExternalStore(listen, get, get);
+  return { get, change, listen, use };
 }
 
 class ValueAtom<T> {
@@ -66,9 +64,13 @@ class ValueAtom<T> {
     return state;
   }
 
+  public useDataOnly(): T {
+    return useContext(Context)(this).use();
+  }
+
   public useData(): [T, Change<T>] {
-    const { useData, change } = useContext(Context)(this);
-    return [useData(), change];
+    const { use, change } = useContext(Context)(this);
+    return [use(), change];
   }
 
   public useChange(): Change<T> {
@@ -110,9 +112,13 @@ class ActionAtom<T, A> {
     return state as any;
   }
 
+  public useDataOnly(): T {
+    return useContext(Context)(this).use();
+  }
+
   public useData(): [T, A] {
-    const { useData, actions } = useContext(Context)(this);
-    return [useData(), actions];
+    const { use, actions } = useContext(Context)(this);
+    return [use(), actions];
   }
 
   public useChange(): A {
@@ -138,7 +144,7 @@ class ComputedAtom<T> {
   }
 
   public useData(): T {
-    return useContext(Context)(this).useData();
+    return useContext(Context)(this).use();
   }
 }
 
@@ -159,7 +165,7 @@ function build(): Query {
 }
 const Context = createContext(build());
 const Root = Context.Provider;
-export const WithStore: FC = (p) => <Root value={useMemo(build, [])}>{p.children}</Root>;
+export const WithStore: FC<PropsWithChildren> = (p) => <Root value={useMemo(build, [])}>{p.children}</Root>;
 
 export function mutate<T extends Function>(init: (use: UseAtom) => T) {
   const cache = new WeakMap<Query, T>();

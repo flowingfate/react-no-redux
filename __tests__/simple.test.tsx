@@ -150,4 +150,88 @@ describe('Unit test for Simple cases', () => {
     fireEvent.click(screen.getByTestId('multiply-btn'));
     expect(screen.getByTestId('proxy-value').textContent).toBe('15');
   });
+
+  it('ValueAtom useDataOnly method', () => {
+    const valueAtom = atom(42);
+
+    const TestComponent = () => {
+      const value = valueAtom.useDataOnly();
+      return <span data-testid="value-only">{value}</span>;
+    };
+
+    const App = () => (
+      <WithStore>
+        <TestComponent />
+      </WithStore>
+    );
+
+    render(<App />);
+    expect(screen.getByTestId('value-only').textContent).toBe('42');
+  });
+
+  it('change with same value should not trigger update', () => {
+    const testAtom = atom(10);
+    let renderCount = 0;
+
+    const TestComponent = () => {
+      renderCount++;
+      const [value, setValue] = testAtom.useData();
+      return (
+        <div>
+          <span data-testid="same-value">{value}</span>
+          <button data-testid="set-same" onClick={() => setValue(10)}>Set Same</button>
+          <button data-testid="set-different" onClick={() => setValue(20)}>Set Different</button>
+        </div>
+      );
+    };
+
+    const App = () => (
+      <WithStore>
+        <TestComponent />
+      </WithStore>
+    );
+
+    render(<App />);
+    expect(screen.getByTestId('same-value').textContent).toBe('10');
+    const initialRenderCount = renderCount;
+
+    // 设置相同值，不应触发重新渲染
+    fireEvent.click(screen.getByTestId('set-same'));
+    expect(screen.getByTestId('same-value').textContent).toBe('10');
+    expect(renderCount).toBe(initialRenderCount);
+
+    // 设置不同值，应触发重新渲染
+    fireEvent.click(screen.getByTestId('set-different'));
+    expect(screen.getByTestId('same-value').textContent).toBe('20');
+    expect(renderCount).toBe(initialRenderCount + 1);
+  });
+
+  it('ActionAtom useDataOnly method', () => {
+    const actionAtom = atom(100, (get, set) => ({
+      double: () => set(get() * 2),
+    }));
+
+    const TestComponent = () => {
+      const value = actionAtom.useDataOnly();
+      const actions = actionAtom.useChange();
+      return (
+        <div>
+          <span data-testid="action-value-only">{value}</span>
+          <button data-testid="double-btn" onClick={actions.double}>Double</button>
+        </div>
+      );
+    };
+
+    const App = () => (
+      <WithStore>
+        <TestComponent />
+      </WithStore>
+    );
+
+    render(<App />);
+    expect(screen.getByTestId('action-value-only').textContent).toBe('100');
+
+    fireEvent.click(screen.getByTestId('double-btn'));
+    expect(screen.getByTestId('action-value-only').textContent).toBe('200');
+  });
 });
